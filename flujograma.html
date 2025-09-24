@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explorador de Flujograma de Clases</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+            color: #334155;
+        }
+        .container {
+            max-width: 1200px;
+        }
+        .search-box {
+            position: relative;
+        }
+        #autocomplete-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            z-index: 10;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .autocomplete-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .autocomplete-item:hover, .autocomplete-item.active {
+            background-color: #e2e8f0;
+        }
+        .flow-container {
+    position: relative;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    background-color: #ffffff;
+    overflow: auto;        /* antes estaba overflow-x, cámbialo para scroll en ambas direcciones */
+    min-height: 1800px;    /* aumenta altura mínima */
+    min-width: 2200px;     /* aumenta ancho mínimo */
+}
+
+        .class-box {
+    position: absolute;
+    width: 150px;   /* antes 120px */
+    height: 70px;   /* antes 60px */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    border-radius: 8px;
+    border: 2px solid #64748b;
+    background-color: #f1f5f9;
+    transition: transform 0.3s, box-shadow 0.3s;
+    cursor: pointer;
+    padding: 5px;
+    font-size: 0.8rem; /* un poquito más grande */
+    line-height: 1rem;
+    z-index: 2;
+}
+
+        .class-box:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+        .class-box.pre-requisite {
+            background-color: #fecaca;
+            border-color: #ef4444;
+        }
+        .class-box.opens {
+            background-color: #d1fae5;
+            border-color: #10b981;
+        }
+        .class-box.selected {
+            background-color: #bfdbfe;
+            border-color: #1d4ed8;
+            transform: scale(1.1);
+            z-index: 5;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+        }
+        .class-box .class-code {
+            font-weight: bold;
+        }
+        .line {
+            position: absolute;
+            background-color: #94a3b8;
+            z-index: 1;
+        }
+        .line.pre-requisite {
+            stroke: #ef4444;
+        }
+        .line.opens {
+            stroke: #10b981;
+        }
+        .line.selected {
+            stroke: #1d4ed8;
+            stroke-width: 3;
+        }
+        .info-box {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+
+    <!-- Contenedor Principal -->
+    <div class="container mx-auto">
+        <h1 class="text-4xl font-bold text-center mb-6">Explorador de Flujograma de Clases</h1>
+        <p class="text-center text-lg mb-8 text-gray-600">Busca una clase para ver sus prerequisitos y las clases que abre, según el plan de estudios de la Politecnica.</p>
+         <a href="index.html" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600">
+      <strong>inicio</strong>
+    </a>
+  </div><br>
+
+        <!-- Sección de Búsqueda e Información -->
+        <div class="flex flex-col md:flex-row gap-8 mb-8">
+            <div class="w-full md:w-1/2">
+                <div class="relative search-box">
+                    <input type="text" id="search-input" placeholder="Buscar por código o nombre de clase" class="w-full px-5 py-3 border-2 border-gray-300 rounded-full focus:outline-none focus:border-blue-500 transition-all duration-300 text-gray-700">
+                    <div id="autocomplete-results" class="bg-white border border-gray-300 rounded-lg shadow-lg hidden"></div>
+                </div>
+            </div>
+            <div class="w-full md:w-1/2">
+                <div id="info-box" class="info-box hidden">
+                    <h2 class="text-2xl font-semibold mb-2" id="info-title"></h2>
+                    <p class="text-gray-600 mb-4" id="info-description"></p>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <div id="info-prerequisites" class="flex-1">
+                            <h3 class="font-bold text-gray-700 mb-1">Prerequisitos:</h3>
+                            <ul class="list-disc list-inside text-gray-600" id="prerequisites-list"></ul>
+                        </div>
+                        <div id="info-opens" class="flex-1">
+                            <h3 class="font-bold text-gray-700 mb-1">Abre:</h3>
+                            <ul class="list-disc list-inside text-gray-600" id="opens-list"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contenedor del Flujograma -->
+        <div class="flow-container" id="flow-container" style="min-width: 1500px; height: 1400px;">
+            <svg id="lines-svg" class="absolute inset-0 w-full h-full" style="z-index: 1;">
+                <defs>
+                    <marker id="arrowhead-opens" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" />
+                    </marker>
+                    <marker id="arrowhead-prereq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" />
+                    </marker>
+                    <marker id="arrowhead-selected" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#1d4ed8" />
+                    </marker>
+                </defs>
+            </svg>
+            <div id="class-boxes" class="relative z-20"></div>
+        </div>
+
+    </div>
+
+    <script>
+        // Data for classes and their relationships, transcribed directly from the provided image.
+        // =====================
+// CLASES Y RELACIONES
+// =====================
+const classes = {
+  "LL-111": { name: "Español", prereq: [], opens: [] },
+  "MM-111": { name: "Matemática I", prereq: [], opens: ["MM-122","MM-131"] },
+  "LL-141": { name: "Inglés I", prereq: [], opens: ["LL-142"] },
+  "HH-131": { name: "Filosofía", prereq: [], opens: [] },
+  "LCC-111": { name: "Lab. Procesamiento de Datos I", prereq: [], opens: ["LCC-122"] },
+  "CN-130-132": { name: "Área Electiva de Ciencias Naturales", prereq: [], opens: [] },
+
+  "MM-122": { name: "Geometría y Trigonometría", prereq: ["MM-111"], opens: ["MM-121"] },
+  "LL-142": { name: "Inglés II", prereq: ["LL-141"], opens: ["LL-143"] },
+  "HH-211": { name: "Sociología", prereq: [], opens: [] },
+  "MM-131": { name: "Cálculo I", prereq: ["MM-111"], opens: ["MM-142","FS-141"] },
+  "LCC-122": { name: "Lab. Procesamiento de Datos II", prereq: ["LCC-111","IS-131"], opens: ["LCC-133"] },
+  "IS-112": { name: "Introducción a la Computación", prereq: [], opens: ["IS-131"] },
+  "IS-131": { name: "Programación I", prereq: ["IS-112"], opens: ["IS-141"] },
+  "HH-121": { name: "Historia de Honduras", prereq: [], opens: [] },
+
+  "LL-143": { name: "Inglés III", prereq: ["LL-142"], opens: [] },
+  "MM-142": { name: "Cálculo II", prereq: ["MM-131"], opens: ["MM-211","MM-212"] },
+  "MM-211": { name: "Estadística I", prereq: ["MM-142"], opens: ["MM-222"] },
+  "LCC-133": { name: "Lab. Procesamiento de Datos III", prereq: ["LCC-122"], opens: [] },
+  "IS-141": { name: "Programación II", prereq: ["IS-131"], opens: ["IS-142","IS-151"] },
+  "IS-142": { name: "Estructura de Datos", prereq: ["IS-141"], opens: ["IS-211"] },
+  "MM-121": { name: "Vectores y Matrices", prereq: ["MM-122"], opens: ["MM-212"] },
+
+  "MM-212": { name: "Ecuaciones Diferenciales", prereq: ["MM-142","MM-121"], opens: ["MM-214","MM-213"] },
+  "MM-222": { name: "Estadística II", prereq: ["MM-211"], opens: [] },
+  "FS-141": { name: "Física I", prereq: [], opens: ["FS-212"] },
+  "MM-213": { name: "Matemática Discreta", prereq: ["MM-212"], opens: ["IS-311","IS-324"] },
+  "ADM-111": { name: "Administración General", prereq: [], opens: [] },
+  "IS-151": { name: "Programación III", prereq: ["IS-141"], opens: ["IS-161"] },
+  "IS-211": { name: "Organización de Archivos", prereq: ["IS-151","IS-142"], opens: ["IS-222","IS-313"] },
+  "FS-212": { name: "Física II", prereq: ["FS-141"], opens: [] },
+  "MM-214": { name: "Métodos Numéricos", prereq: ["MM-212"], opens: ["IS-314"] },
+
+  "IP-343": { name: "Contabilidad General", prereq: [], opens: ["IP-413"] },
+  "IS-161": { name: "Programación IV", prereq: ["IS-151"], opens: ["IS-222"] },
+  "IS-222": { name: "Sistemas de Información", prereq: ["IS-161","IS-211"], opens: ["IS-342","IS-334","IS-343"] },
+  "RH-131": { name: "Arte/Deporte", prereq: [], opens: [] },
+  "IS-311": { name: "Análisis de Algoritmos", prereq: ["MM-213"], opens: [] },
+  "IP-413": { name: "Contabilidad de Costos", prereq: ["IP-343"], opens: ["IP-431"] },
+  "IS-313": { name: "Teoría de Bases de Datos I", prereq: ["IS-211"], opens: ["IS-333"] },
+  "IS-312": { name: "Circuitos Digitales", prereq: [], opens: ["IS-321"] },
+  "IS-321": { name: "Buses y Periféricas", prereq: ["IS-312"], opens: ["IS-331"] },
+
+  "LIP-141": { name: "Dibujo Técnico", prereq: [], opens: [] },
+  "IS-333": { name: "Teoría de Bases de Datos II", prereq: ["IS-313"], opens: [] },
+  "IS-342": { name: "Ingeniería de Software I", prereq: ["IS-222"], opens: ["IS-412"] },
+  "IS-331": { name: "Equipo de Transmisión de Datos", prereq: ["IS-321"], opens: ["IS-341"] },
+  "IS-341": { name: "Tecnología de Redes Locales", prereq: ["IS-331"], opens: ["IS-413","IS-431"] },
+  "IP-431": { name: "Finanzas", prereq: ["IP-413"], opens: ["IP-441"] },
+  "IS-334": { name: "Lenguajes de Programación", prereq: ["IS-222"], opens: ["IS-432"] },
+  "IS-343": { name: "Sistemas Operativos I", prereq: ["IS-222"], opens: ["IS-421"] },
+  "IS-314": { name: "Fundamentos de Informática Gráfica", prereq: ["MM-214"], opens: ["IS-332"] },
+
+  "IP-441": { name: "Prep. y Evaluación de Proyectos", prereq: ["IP-431"], opens: ["LIP-441"] },
+  "IS-412": { name: "Ingeniería de Software II", prereq: ["IS-342"], opens: ["LIP-441"] },
+  "IS-413": { name: "Seguridad de la Información", prereq: ["IS-341"], opens: ["LIP-441"] },
+  "IS-324": { name: "Fundamentos de Inteligencia Artificial", prereq: ["MM-213"], opens: [] },
+  "IS-411": { name: "Taller de Ensamblaje I", prereq: ["IS-321"], opens: ["IS-422"] },
+  "IS-421": { name: "Programación de Sistemas Operativos", prereq: ["IS-343"], opens: ["IS-423"] },
+  "IS-332": { name: "Informática Gráfica Aplicada", prereq: ["IS-314"], opens: [] },
+  "IS-422": { name: "Taller de Ensamblaje II", prereq: ["IS-411"], opens: ["LIP-441"] },
+  "IS-423": { name: "Sistemas Operativos II", prereq: ["IS-421"], opens: ["LIP-441"] },
+  "IS-431": { name: "Administración de Centro de Cómputo", prereq: ["IS-341"], opens: ["LIP-441"] },
+  "IS-432": { name: "Traductores e Intérpretes", prereq: ["IS-334"], opens: ["IS-441","LIP-441"] },
+  "LIP-441": { name: "Seminario de Graduación", prereq: ["IP-441","IS-412","IS-413","IS-422","IS-423","IS-431","IS-432","MM-222","FS-212","RH-131","ADM-111","LIP-141","CN-130-132","HH-131","HH-211","HH-121","LL-111","LL-143"], opens: [] },
+  "IS-441": { name: "Traductores e Intérpretes II", prereq: ["IS-432"], opens: [] }
+};
+
+// =====================
+// POSICIONES ORDENADAS
+// =====================
+
+const gridSizeX = 220;
+const gridSizeY = 120;
+
+function grid(row, col) {
+  return { x: col * gridSizeX, y: row * gridSizeY };
+}
+
+const positions = {
+  // --- Matemáticas ---
+  "MM-111": grid(0, 0),
+  "MM-122": grid(1, 0),
+  "MM-131": grid(2, 0),
+  "MM-142": grid(3, 0),
+  "MM-121": grid(4, 0),
+  "MM-212": grid(5, 0),
+  "MM-214": grid(6, 0),
+  "MM-213": grid(7, 0),
+  "MM-211": grid(8, 0),
+  "MM-222": grid(9, 0),
+
+  // --- Computación ---
+  "IS-112": grid(0, 1),
+  "IS-131": grid(1, 1),
+  "IS-141": grid(2, 1),
+  "IS-142": grid(3, 1),
+  "IS-151": grid(4, 1),
+  "IS-161": grid(5, 1),
+  "IS-211": grid(6, 1),
+  "IS-222": grid(7, 1),
+  "IS-313": grid(8, 1),
+  "IS-333": grid(9, 1),
+  "IS-342": grid(10, 1),
+  "IS-412": grid(11, 1),
+  "IS-343": grid(12, 1),
+  "IS-421": grid(13, 1),
+  "IS-423": grid(14, 1),
+  "IS-441": grid(15, 1),
+  "IS-312": grid(0, 7),
+  "IS-321": grid(1, 7),
+  "IS-331": grid(2, 7),
+  "IS-341": grid(3, 7),
+  "IS-413": grid(4, 7),
+  "IS-431": grid(5, 7),
+  "IS-334": grid(6, 7),
+  "IS-432": grid(7, 7),
+  "IS-324": grid(8, 7),
+  "IS-311": grid(9, 7),
+  "IS-411": grid(10, 7),
+  "IS-422": grid(11, 7),
+  "IS-314": grid(12, 7),
+  "IS-332": grid(13, 7),
+
+  // --- Generales ---
+  "LL-111": grid(0, 2),
+  "LL-141": grid(1, 2),
+  "LL-142": grid(2, 2),
+  "LL-143": grid(3, 2),
+  "HH-131": grid(4, 2),
+  "HH-211": grid(5, 2),
+  "HH-121": grid(6, 2),
+  "CN-130-132": grid(7, 2),
+  "RH-131": grid(8, 2),
+  "ADM-111": grid(9, 2),
+
+  // --- Laboratorios ---
+  "LCC-111": grid(0, 3),
+  "LCC-122": grid(1, 3),
+  "LCC-133": grid(2, 3),
+
+  // --- Física ---
+  "FS-141": grid(0, 4),
+  "FS-212": grid(1, 4),
+
+  // --- Contabilidad ---
+  "IP-343": grid(0, 5),
+  "IP-413": grid(1, 5),
+  "IP-431": grid(2, 5),
+  "IP-441": grid(3, 5),
+
+  // --- Otros ---
+  "LIP-141": grid(0, 6),
+  "LIP-441": grid(1, 6),
+};
+
+
+
+
+        const classBoxesContainer = document.getElementById('class-boxes');
+        const linesSvg = document.getElementById('lines-svg');
+        const searchInput = document.getElementById('search-input');
+        const autocompleteResults = document.getElementById('autocomplete-results');
+        const infoBox = document.getElementById('info-box');
+        const infoTitle = document.getElementById('info-title');
+        const infoDescription = document.getElementById('info-description');
+        const prerequisitesList = document.getElementById('prerequisites-list');
+        const opensList = document.getElementById('opens-list');
+        let selectedClass = null;
+        function renderFlowchart() {
+            classBoxesContainer.innerHTML = '';
+            linesSvg.innerHTML = `
+                <defs>
+                    <marker id="arrowhead-opens" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" />
+                    </marker>
+                    <marker id="arrowhead-prereq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" />
+                    </marker>
+                    <marker id="arrowhead-selected" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#1d4ed8" />
+                    </marker>
+                </defs>
+            `;
+            // Render lines first to appear behind the boxes
+            for (const code in classes) {
+                const classData = classes[code];
+                const startPos = positions[code];
+                if (startPos) {
+                    classData.opens.forEach(nextCode => {
+                        const endPos = positions[nextCode];
+                        if (endPos) {
+                            renderLine(startPos, endPos, code, nextCode);
+                        }
+                    });
+                }
+            }
+            // Render class boxes
+for (const code in classes) {
+    const classData = classes[code];
+    const pos = positions[code];
+    if (pos) {
+        const classBox = document.createElement('div');
+        classBox.className = 'class-box';
+        classBox.style.left = `${pos.x}px`;
+        classBox.style.top = `${pos.y}px`;
+        classBox.dataset.code = code;
+        classBox.innerHTML = `<span class="class-code">${code}</span><span>${classData.name}</span>`;
+        classBox.onclick = () => selectClass(code);
+        classBoxesContainer.appendChild(classBox);
+    }
+}
+
+function highlightClasses() {
+    const classBoxes = document.querySelectorAll('.class-box');
+    // Reset all styles
+    classBoxes.forEach(box => {
+        box.classList.remove('selected', 'pre-requisite', 'opens');
+    });
+
+    if (selectedClass) {
+        const selectedBox = document.querySelector(`.class-box[data-code="${selectedClass}"]`);
+        if (selectedBox) selectedBox.classList.add('selected');
+    }
+}
+
+        }
+        function renderLine(startPos, endPos, startCode, endCode) {
+    const svgPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+
+    // Coordenadas de inicio y fin (ajustadas al centro de la caja)
+    const startX = startPos.x + 75; // centrado según .class-box width
+    const startY = startPos.y + 70; // desde abajo de la caja
+    const endX = endPos.x + 75;
+    const endY = endPos.y;
+
+    // --- Línea ortogonal (en L) ---
+    const midX = startX;
+    const midY = endY;
+
+    const d = `M ${startX} ${startY} L ${midX} ${midY} L ${endX} ${endY}`;
+
+    // Estilos por defecto
+    svgPath.setAttribute("d", d);
+    svgPath.setAttribute("fill", "none");
+    svgPath.setAttribute("stroke", "#94a3b8");
+    svgPath.setAttribute("stroke-width", "2");
+    svgPath.setAttribute("data-start", startCode);
+    svgPath.setAttribute("data-end", endCode);
+    svgPath.setAttribute("marker-end", "url(#arrowhead-opens)");
+
+    linesSvg.appendChild(svgPath);
+}
+
+        function highlightClasses() {
+            const classBoxes = document.querySelectorAll('.class-box');
+            const lines = linesSvg.querySelectorAll('path');
+            // Reset all styles
+            classBoxes.forEach(box => {
+                box.classList.remove('selected', 'pre-requisite', 'opens');
+            });
+            lines.forEach(line => {
+                line.setAttribute('stroke', '#94a3b8');
+                line.setAttribute('marker-end', 'url(#arrowhead-opens)');
+            });
+            if (selectedClass) {
+                const selectedBox = document.querySelector(`.class-box[data-code="${selectedClass}"]`);
+                if (selectedBox) selectedBox.classList.add('selected');
+                // Highlight prerequisites
+                lines.forEach(line => {
+                    if (line.dataset.end === selectedClass) {
+                        line.setAttribute('stroke', '#ef4444');
+                        line.setAttribute('marker-end', 'url(#arrowhead-prereq)');
+                        const prereqBox = document.querySelector(`.class-box[data-code="${line.dataset.start}"]`);
+                        if (prereqBox) prereqBox.classList.add('pre-requisite');
+                    }
+                });
+                // Highlight classes that open
+                lines.forEach(line => {
+                    if (line.dataset.start === selectedClass) {
+                        line.setAttribute('stroke', '#10b981');
+                        line.setAttribute('marker-end', 'url(#arrowhead-opens)');
+                        const opensBox = document.querySelector(`.class-box[data-code="${line.dataset.end}"]`);
+                        if (opensBox) opensBox.classList.add('opens');
+                    }
+                });
+            }
+        }
+        function updateInfoBox() {
+            if (selectedClass) {
+                const classData = classes[selectedClass];
+                infoTitle.textContent = `${selectedClass} - ${classData.name}`;
+                infoDescription.textContent = `Esta clase fue abierta por las siguientes:`;
+                const prereqCodes = Object.keys(classes).filter(code => classes[code].opens.includes(selectedClass));
+                prerequisitesList.innerHTML = prereqCodes.length > 0
+                    ? prereqCodes.map(code => `<li>${code} - ${classes[code].name}</li>`).join('')
+                    : '<li>Esta es una clase inicial, no requiere prerequisitos.</li>';
+                infoDescription.textContent += `\n\n Esta clase es la puerta para que te aparezcan estas otras clases el próximo período:`;
+                const opens = classData.opens;
+                opensList.innerHTML = opens.length > 0
+                    ? opens.map(code => `<li>${code} - ${classes[code].name}</li>`).join('')
+                    : '<li>Esta es una de las últimas clases en esta ruta, no abre otras materias.</li>';
+                infoBox.classList.remove('hidden');
+            } else {
+                infoBox.classList.add('hidden');
+            }
+        }
+        function selectClass(code) {
+            selectedClass = code;
+            highlightClasses();
+            updateInfoBox();
+        }
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.toLowerCase();
+            autocompleteResults.innerHTML = '';
+            if (query.length > 0) {
+                const results = Object.keys(classes).filter(code => 
+                    code.toLowerCase().includes(query) || classes[code].name.toLowerCase().includes(query)
+                );
+                
+                if (results.length > 0) {
+                    autocompleteResults.classList.remove('hidden');
+                    results.forEach(code => {
+                        const item = document.createElement('div');
+                        item.className = 'autocomplete-item';
+                        item.textContent = `${code} - ${classes[code].name}`;
+                        item.onclick = () => {
+                        searchInput.value = classes[code].name; // muestra el nombre en el input
+                        autocompleteResults.classList.add('hidden');
+                        selectClass(code); // pero sigue usando el código internamente
+                    };
+
+                        autocompleteResults.appendChild(item);
+                    });
+                } else {
+                    const allClassNames = Object.keys(classes).map(code => classes[code].name.toLowerCase());
+                    const allClassCodes = Object.keys(classes).map(code => code.toLowerCase());
+                    const findClosestMatch = (input, candidates) => {
+                        let bestMatch = '';
+                        let minDistance = Infinity;
+                        candidates.forEach(candidate => {
+                            const distance = levenshteinDistance(input, candidate);
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                bestMatch = candidate;
+                            }
+                        });
+                        return minDistance <= 3 ? bestMatch : null;
+                    };
+                    const closestName = findClosestMatch(query, allClassNames);
+                    const closestCode = findClosestMatch(query, allClassCodes);
+                    const closestMatch = closestName || closestCode;
+                    if (closestMatch) {
+                        const item = document.createElement('div');
+                        item.className = 'autocomplete-item text-red-500';
+                        const originalCode = Object.keys(classes).find(key => classes[key].name.toLowerCase() === closestMatch || key.toLowerCase() === closestMatch);
+                        item.textContent = `¿Quisiste decir "${classes[originalCode].name}" (${originalCode})?`;
+                        item.onclick = () => {
+                        searchInput.value = classes[originalCode].name;
+                        autocompleteResults.classList.add('hidden');
+                        selectClass(originalCode);
+                        };
+
+                        autocompleteResults.appendChild(item);
+                        autocompleteResults.classList.remove('hidden');
+                    }
+                }
+            } else {
+                autocompleteResults.classList.add('hidden');
+            }
+        });
+        function levenshteinDistance(a, b) {
+            const matrix = [];
+            for (let i = 0; i <= b.length; i++) {
+                matrix[i] = [i];
+            }
+            for (let j = 0; j <= a.length; j++) {
+                matrix[0][j] = j;
+            }
+            for (let i = 1; i <= b.length; i++) {
+                for (let j = 1; j <= a.length; j++) {
+                    const cost = a[j - 1] === b[i - 1] ? 0 : 1;
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j] + 1,
+                        matrix[i][j - 1] + 1,
+                        matrix[i - 1][j - 1] + cost
+                    );
+                }
+            }
+            return matrix[b.length][a.length];
+        }
+        document.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !autocompleteResults.contains(e.target)) {
+                autocompleteResults.classList.add('hidden');
+            }
+        });
+        renderFlowchart();
+    </script>
+</body>
+</html>
